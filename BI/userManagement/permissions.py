@@ -1,6 +1,6 @@
 # userManagement/permissions.py
 from rest_framework import permissions
-
+from rest_framework.permissions import BasePermission, IsAuthenticated, AllowAny
 class IsAdmin(permissions.BasePermission):
     def has_permission(self, request, view):
         return request.user and request.user.is_staff
@@ -13,11 +13,9 @@ class HasPermission(permissions.BasePermission):
         if not request.user or not request.user.is_authenticated:
             return False
         
-        # Superusers have all permissions
         if request.user.is_superuser:
             return True
         
-        # Check if user has the specific permission
         return request.user.has_perm(self.permission_codename)
 
 class IsOwnerOrAdmin(permissions.BasePermission):
@@ -25,7 +23,6 @@ class IsOwnerOrAdmin(permissions.BasePermission):
         if request.user.is_superuser or request.user.is_staff:
             return True
             
-        # Check if the object has a user attribute and it matches the request user
         if hasattr(obj, 'user'):
             return obj.user == request.user
         elif hasattr(obj, 'id'):
@@ -33,35 +30,89 @@ class IsOwnerOrAdmin(permissions.BasePermission):
             
         return False
 
-# Specific permission classes for common use cases
+# User permissions
 class CanViewUsers(HasPermission):
     def __init__(self):
-        super().__init__('user.view')
+        super().__init__('userManagement.view_customuser')
 
 class CanAddUsers(HasPermission):
     def __init__(self):
-        super().__init__('user.add')
+        super().__init__('userManagement.add_customuser')
 
 class CanChangeUsers(HasPermission):
     def __init__(self):
-        super().__init__('user.change')
+        super().__init__('userManagement.change_customuser')
 
 class CanDeleteUsers(HasPermission):
     def __init__(self):
-        super().__init__('user.delete')
+        super().__init__('userManagement.delete_customuser')
 
+# Role permissions
 class CanViewRoles(HasPermission):
     def __init__(self):
-        super().__init__('role.view')
+        super().__init__('userManagement.view_role')
 
 class CanManageRoles(HasPermission):
     def __init__(self):
-        super().__init__('role.manage')
+        super().__init__('userManagement.manage_role')
 
+# Permission permissions
 class CanViewPermissions(HasPermission):
     def __init__(self):
-        super().__init__('permission.view')
+        super().__init__('userManagement.view_apppermission')
 
 class CanManagePermissions(HasPermission):
     def __init__(self):
-        super().__init__('permission.manage')
+        super().__init__('userManagement.manage_apppermission')
+
+# Branch permissions
+class CanViewBranches(HasPermission):
+    def __init__(self):
+        super().__init__('userManagement.view_branch')
+
+class CanManageBranches(HasPermission):
+    def __init__(self):
+        super().__init__('userManagement.manage_branch')
+
+# Department permissions
+class CanViewDepartments(HasPermission):
+    def __init__(self):
+        super().__init__('userManagement.view_department')
+
+class CanManageDepartments(HasPermission):
+    def __init__(self):
+        super().__init__('userManagement.manage_department')
+
+# Report permissions
+class CanViewAccountBase(HasPermission):
+    def __init__(self):
+        super().__init__('userManagement.view_accountbase')
+
+class CanViewReports(HasPermission):
+    def __init__(self):
+        super().__init__('userManagement.view_reports')
+
+class CanExportReports(HasPermission):
+    def __init__(self):
+        super().__init__('userManagement.export_reports')
+
+class OrPermission(permissions.BasePermission):
+    """
+    Permission that allows access if any of the given permissions passes.
+    """
+    def __init__(self, *permission_classes):
+        self.permission_classes = permission_classes
+
+    def has_permission(self, request, view):
+        for permission_class in self.permission_classes:
+            permission = permission_class()
+            if permission.has_permission(request, view):
+                return True
+        return False
+
+    def has_object_permission(self, request, view, obj):
+        for permission_class in self.permission_classes:
+            permission = permission_class()
+            if permission.has_object_permission(request, view, obj):
+                return True
+        return False

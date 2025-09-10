@@ -1,9 +1,9 @@
-# userManagement/models.py
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.utils.translation import gettext_lazy as _
 import uuid
 
+# ------------------ User Manager ------------------
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):
         if not email:
@@ -23,9 +23,10 @@ class CustomUserManager(BaseUserManager):
             raise ValueError(_('Superuser must have is_staff=True.'))
         if extra_fields.get('is_superuser') is not True:
             raise ValueError(_('Superuser must have is_superuser=True.'))
+
         return self.create_user(email, password, **extra_fields)
 
-# Rename Permission to AppPermission to avoid conflict with Django's built-in Permission
+# ------------------ Permissions ------------------
 class AppPermission(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)
@@ -42,6 +43,7 @@ class AppPermission(models.Model):
     def __str__(self):
         return self.name
 
+# ------------------ Role ------------------
 class Role(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100, unique=True)
@@ -56,15 +58,34 @@ class Role(models.Model):
     def __str__(self):
         return self.name
 
+# ------------------ Branch ------------------
+class Branch(models.Model):
+    branchCode = models.CharField(primary_key=True, max_length=100)
+    branchName = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.branchName
+
+# ------------------ Department ------------------
+class Department(models.Model):
+    departmentCode = models.CharField(primary_key=True, max_length=100)
+    departmentName = models.CharField(max_length=255)
+    branch = models.ForeignKey(Branch, on_delete=models.CASCADE)
+
+    def __str__(self):
+        return self.departmentName
+
+# ------------------ Custom User ------------------
 class CustomUser(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(_('email address'), unique=True)
     first_name = models.CharField(max_length=30, blank=True)
     last_name = models.CharField(max_length=30, blank=True)
+    branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True)
+    role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True)
     is_staff = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
     is_superuser = models.BooleanField(default=False)
-    role = models.ForeignKey(Role, on_delete=models.SET_NULL, null=True, blank=True)
     date_joined = models.DateTimeField(auto_now_add=True)
     last_login = models.DateTimeField(auto_now=True)
 
@@ -72,6 +93,18 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     REQUIRED_FIELDS = []
 
     objects = CustomUserManager()
+
+    groups = models.ManyToManyField(
+        'auth.Group',
+        related_name='customuser_set',
+        blank=True,
+    )
+    
+    user_permissions = models.ManyToManyField(
+        'auth.Permission',
+        related_name='customuser_set',
+        blank=True,
+    )
 
     def __str__(self):
         return self.email
@@ -81,32 +114,16 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 
     def get_all_permissions(self, obj=None):
         permissions = set()
-        
-        # Get permissions from role
         if self.role:
             permissions.update(self.role.permissions.all())
-        
-        # Get direct user permissions (Django's built-in permissions)
         permissions.update(self.user_permissions.all())
-        
-        # Superusers have all permissions
         if self.is_superuser:
             permissions.update(AppPermission.objects.all())
-            
         return permissions
 
     def has_perm(self, perm, obj=None):
         if self.is_superuser:
             return True
-            
-        # Check if user has the specific permission
         perm_codename = perm.split('.')[-1] if '.' in perm else perm
-        
-        # Check Django's built-in permissions
-        if hasattr(self, 'has_perm_builtin'):
-            if self.has_perm_builtin(perm):
-                return True
-        
-        # Check custom application permissions
         user_permissions = self.get_all_permissions()
         return any(p.codename == perm_codename for p in user_permissions if hasattr(p, 'codename'))
